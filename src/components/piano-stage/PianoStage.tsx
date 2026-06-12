@@ -14,6 +14,8 @@ type PianoStageProps = {
   keys?: PianoKeyLayout[];
   activeMidis: number[];
   focusedMidi: number | null;
+  keyboardLabels?: Record<number, string>;
+  showKeyboardLabels?: boolean;
   onKeyPress: (key: PianoKeyLayout) => void;
 };
 
@@ -23,12 +25,14 @@ const WHITE_KEY_FOCUSED = 0xf0b55a;
 const BLACK_KEY_BASE = 0x1f2c39;
 const BLACK_KEY_ACTIVE = 0xf18d2d;
 const BLACK_KEY_FOCUSED = 0xf4ba62;
+const MAPPED_KEY_STROKE = 0x167a4a;
 
 function redrawKeyGraphic(
   graphic: Graphics,
   key: PianoKeyLayout,
   isActive: boolean,
   isFocused: boolean,
+  isMapped: boolean,
 ) {
   const fill = key.isBlack
     ? isActive
@@ -42,9 +46,11 @@ function redrawKeyGraphic(
     ? key.isBlack
       ? BLACK_KEY_FOCUSED
       : WHITE_KEY_FOCUSED
-    : key.isBlack
-      ? 0x0f172a
-      : 0xd1d9e2;
+    : isMapped
+      ? MAPPED_KEY_STROKE
+      : key.isBlack
+        ? 0x0f172a
+        : 0xd1d9e2;
 
   graphic.clear();
   graphic
@@ -52,7 +58,7 @@ function redrawKeyGraphic(
     .fill(fill)
     .stroke({
       color: stroke,
-      width: isFocused ? 2.5 : 1.5,
+      width: isFocused || isMapped ? 2.5 : 1.5,
     });
 }
 
@@ -60,14 +66,16 @@ export function PianoStage({
   keys,
   activeMidis,
   focusedMidi,
+  keyboardLabels = {},
+  showKeyboardLabels = false,
   onKeyPress,
 }: PianoStageProps) {
   const pianoKeys = useMemo(() => keys ?? buildPianoKeys(), [keys]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const centeredRef = useRef(false);
   const appRef = useRef<Application | null>(null);
   const graphicsRef = useRef<Map<number, Graphics>>(new Map());
+  const keyboardLabelRefs = useRef<Map<number, Text>>(new Map());
   const onKeyPressRef = useRef(onKeyPress);
 
   useEffect(() => {
@@ -78,6 +86,7 @@ export function PianoStage({
     let cancelled = false;
     let pixiApp: Application | null = null;
     const graphicsMap = new Map<number, Graphics>();
+    const keyboardLabelMap = new Map<number, Text>();
 
     async function setupStage() {
       const host = hostRef.current;
@@ -115,15 +124,19 @@ export function PianoStage({
       stage.addChild(whiteLayer, blackLayer, labelLayer);
       graphicsRef.current = graphicsMap;
 
-      for (const key of pianoKeys.filter((entry) => !entry.isBlack)) {
+      for (const key of pianoKeys) {
         const graphic = new Graphics();
         graphic.eventMode = "static";
         graphic.cursor = "pointer";
-        redrawKeyGraphic(graphic, key, false, false);
+        redrawKeyGraphic(graphic, key, false, false, false);
         graphic.on("pointerdown", () => {
           onKeyPressRef.current(key);
         });
-        whiteLayer.addChild(graphic);
+        if (key.isBlack) {
+          blackLayer.addChild(graphic);
+        } else {
+          whiteLayer.addChild(graphic);
+        }
         graphicsMap.set(key.midi, graphic);
 
         if (canShowKeyLabel(key)) {
@@ -141,36 +154,25 @@ export function PianoStage({
           text.y = key.y + key.height - 18;
           labelLayer.addChild(text);
         }
-      }
 
-      for (const key of pianoKeys.filter((entry) => entry.isBlack)) {
-        const graphic = new Graphics();
-        graphic.eventMode = "static";
-        graphic.cursor = "pointer";
-        redrawKeyGraphic(graphic, key, false, false);
-        graphic.on("pointerdown", () => {
-          onKeyPressRef.current(key);
+        const keyboardText = new Text({
+          text: "",
+          style: {
+            fill: key.isBlack ? "#fff7d6" : "#12633d",
+            fontFamily: "Avenir Next, PingFang SC, sans-serif",
+            fontSize: key.isBlack ? 11 : 13,
+            fontWeight: "500",
+          },
+          anchor: { x: 0.5, y: 0.5 },
         });
-        blackLayer.addChild(graphic);
-        graphicsMap.set(key.midi, graphic);
+        keyboardText.x = key.x + key.width / 2;
+        keyboardText.y = key.isBlack ? key.y + 28 : key.y + 92;
+        keyboardText.visible = false;
+        labelLayer.addChild(keyboardText);
+        keyboardLabelMap.set(key.midi, keyboardText);
       }
 
-      if (!centeredRef.current) {
-        requestAnimationFrame(() => {
-          const scroller = scrollRef.current;
-          const middleC = pianoKeys.find((entry) => entry.noteName === "C4");
-
-          if (!scroller || !middleC) {
-            return;
-          }
-
-          scroller.scrollLeft = Math.max(
-            0,
-            middleC.x - scroller.clientWidth / 2,
-          );
-          centeredRef.current = true;
-        });
-      }
+      keyboardLabelRefs.current = keyboardLabelMap;
     }
 
     void setupStage();
@@ -178,7 +180,9 @@ export function PianoStage({
     return () => {
       cancelled = true;
       graphicsMap.clear();
+      keyboardLabelMap.clear();
       graphicsRef.current = new Map();
+      keyboardLabelRefs.current = new Map();
       appRef.current = null;
 
       if (pixiApp) {
@@ -190,6 +194,7 @@ export function PianoStage({
   useEffect(() => {
     for (const key of pianoKeys) {
       const graphic = graphicsRef.current.get(key.midi);
+      const keyboardLabel = keyboardLabelRefs.current.get(key.midi);
 
       if (!graphic) {
         continue;
@@ -200,9 +205,16 @@ export function PianoStage({
         key,
         activeMidis.includes(key.midi),
         focusedMidi === key.midi,
+        showKeyboardLabels && keyboardLabels[key.midi] !== undefined,
       );
+
+      if (keyboardLabel) {
+        keyboardLabel.text = keyboardLabels[key.midi] ?? "";
+        keyboardLabel.visible =
+          showKeyboardLabels && keyboardLabels[key.midi] !== undefined;
+      }
     }
-  }, [activeMidis, focusedMidi, pianoKeys]);
+  }, [activeMidis, focusedMidi, keyboardLabels, pianoKeys, showKeyboardLabels]);
 
   return (
     <div ref={scrollRef} className="stage-scroll">

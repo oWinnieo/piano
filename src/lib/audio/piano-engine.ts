@@ -99,6 +99,19 @@ export async function triggerPianoNote(
   activeSampler.triggerAttackRelease(noteName, duration, undefined, velocity);
 }
 
+export async function triggerPianoNoteAttack(noteName: string, velocity = 0.9) {
+  const activeSampler = await preparePianoAudio();
+  activeSampler.triggerAttack(noteName, undefined, velocity);
+}
+
+export function triggerPianoNoteRelease(noteName: string) {
+  sampler?.triggerRelease(noteName);
+}
+
+export function releaseAllPianoNotes() {
+  sampler?.releaseAll();
+}
+
 export async function playScoreDocument(
   score: ScoreDocument,
   callbacks: PlaybackCallbacks = {},

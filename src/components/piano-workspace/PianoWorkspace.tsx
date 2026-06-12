@@ -1,16 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PianoStage } from "@/components/piano-stage/PianoStage";
 import { ScorePanel } from "@/components/score-panel/ScorePanel";
 import { TransportBar } from "@/components/transport-bar/TransportBar";
 import {
+  releaseAllPianoNotes,
   playScoreDocument,
   preparePianoAudio,
   stopScorePlayback,
   triggerPianoNote,
+  triggerPianoNoteAttack,
+  triggerPianoNoteRelease,
 } from "@/lib/audio/piano-engine";
 import { buildPianoKeys } from "@/modules/piano/key-layout";
+import {
+  DEFAULT_KEYBOARD_ROW_ID,
+  getKeyboardMappedMidi,
+  getKeyboardMidiLabels,
+  getKeyboardRangeLabel,
+  type PianoKeyboardRowId,
+} from "@/modules/piano/keyboard-mapping";
 import type { PianoKeyLayout } from "@/modules/piano/types";
 import { DEMO_SCORE } from "@/modules/score/demo-score";
 
@@ -25,11 +35,28 @@ export function PianoWorkspace() {
   const [audioStatus, setAudioStatus] = useState<AudioStatus>("idle");
   const [playbackStatus, setPlaybackStatus] =
     useState<PlaybackStatus>("stopped");
+  const [keyboardMappingEnabled, setKeyboardMappingEnabled] = useState(false);
+  const [keyboardRowId, setKeyboardRowId] = useState<PianoKeyboardRowId>(
+    DEFAULT_KEYBOARD_ROW_ID,
+  );
   const [activeMidis, setActiveMidis] = useState<number[]>([]);
   const [selectedKey, setSelectedKey] = useState<PianoKeyLayout | null>(null);
   const cleanupTimersRef = useRef<number[]>([]);
+  const pressedKeyboardKeysRef = useRef<Map<string, PianoKeyLayout>>(new Map());
+  const keyByMidi = useMemo(
+    () => new Map(pianoKeys.map((key) => [key.midi, key])),
+    [pianoKeys],
+  );
+  const keyboardRangeLabel = useMemo(
+    () => getKeyboardRangeLabel(keyboardRowId),
+    [keyboardRowId],
+  );
+  const keyboardLabels = useMemo(
+    () => getKeyboardMidiLabels(keyboardRowId),
+    [keyboardRowId],
+  );
 
-  function activateMidi(midi: number) {
+  const activateMidi = useCallback((midi: number) => {
     setActiveMidis((current) => {
       if (current.includes(midi)) {
         return current;
@@ -37,11 +64,11 @@ export function PianoWorkspace() {
 
       return [...current, midi];
     });
-  }
+  }, []);
 
-  function deactivateMidi(midi: number) {
+  const deactivateMidi = useCallback((midi: number) => {
     setActiveMidis((current) => current.filter((value) => value !== midi));
-  }
+  }, []);
 
   function queueDeactivate(midi: number, delayMs: number) {
     if (typeof window === "undefined") {
@@ -68,6 +95,32 @@ export function PianoWorkspace() {
     }
 
     cleanupTimersRef.current = [];
+  }
+
+  const releasePressedKeyboardNotes = useCallback(() => {
+    for (const key of pressedKeyboardKeysRef.current.values()) {
+      triggerPianoNoteRelease(key.noteName);
+      deactivateMidi(key.midi);
+    }
+
+    pressedKeyboardKeysRef.current.clear();
+  }, [deactivateMidi]);
+
+  function handleToggleKeyboardMapping() {
+    setKeyboardMappingEnabled((enabled) => {
+      if (enabled) {
+        releasePressedKeyboardNotes();
+        releaseAllPianoNotes();
+      }
+
+      return !enabled;
+    });
+  }
+
+  function handleKeyboardRowChange(rowId: PianoKeyboardRowId) {
+    releasePressedKeyboardNotes();
+    releaseAllPianoNotes();
+    setKeyboardRowId(rowId);
   }
 
   async function enableAudio() {
@@ -102,6 +155,48 @@ export function PianoWorkspace() {
       setAudioStatus("error");
     }
   }
+
+  const handleKeyboardNoteEnd = useCallback(
+    (code: string) => {
+      const key = pressedKeyboardKeysRef.current.get(code);
+
+      if (!key) {
+        return;
+      }
+
+      pressedKeyboardKeysRef.current.delete(code);
+      triggerPianoNoteRelease(key.noteName);
+      deactivateMidi(key.midi);
+    },
+    [deactivateMidi],
+  );
+
+  const handleKeyboardNoteStart = useCallback(
+    async (code: string, key: PianoKeyLayout) => {
+      pressedKeyboardKeysRef.current.set(code, key);
+      setSelectedKey(key);
+      activateMidi(key.midi);
+
+      try {
+        setAudioStatus((current) =>
+          current === "ready" ? current : "loading",
+        );
+
+        await triggerPianoNoteAttack(key.noteName, 0.9);
+        setAudioStatus("ready");
+
+        if (!pressedKeyboardKeysRef.current.has(code)) {
+          triggerPianoNoteRelease(key.noteName);
+        }
+      } catch (error) {
+        console.error("键盘弹奏失败", error);
+        pressedKeyboardKeysRef.current.delete(code);
+        deactivateMidi(key.midi);
+        setAudioStatus("error");
+      }
+    },
+    [activateMidi, deactivateMidi],
+  );
 
   async function handlePlayDemo() {
     if (playbackStatus === "playing") {
@@ -151,8 +246,84 @@ export function PianoWorkspace() {
   }
 
   useEffect(() => {
+    if (!keyboardMappingEnabled) {
+      releasePressedKeyboardNotes();
+      return;
+    }
+
+    function shouldIgnoreKeyboardEvent(event: KeyboardEvent) {
+      const target = event.target;
+
+      if (!(target instanceof HTMLElement)) {
+        return false;
+      }
+
+      return (
+        target.isContentEditable ||
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT"
+      );
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (shouldIgnoreKeyboardEvent(event)) {
+        return;
+      }
+
+      const midi = getKeyboardMappedMidi(event.code, keyboardRowId);
+
+      if (midi === null) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (event.repeat || pressedKeyboardKeysRef.current.has(event.code)) {
+        return;
+      }
+
+      const key = keyByMidi.get(midi);
+
+      if (!key) {
+        return;
+      }
+
+      void handleKeyboardNoteStart(event.code, key);
+    }
+
+    function handleKeyUp(event: KeyboardEvent) {
+      if (!pressedKeyboardKeysRef.current.has(event.code)) {
+        return;
+      }
+
+      event.preventDefault();
+      handleKeyboardNoteEnd(event.code);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", releasePressedKeyboardNotes);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", releasePressedKeyboardNotes);
+      releasePressedKeyboardNotes();
+    };
+  }, [
+    handleKeyboardNoteEnd,
+    handleKeyboardNoteStart,
+    keyboardMappingEnabled,
+    keyboardRowId,
+    keyByMidi,
+    releasePressedKeyboardNotes,
+  ]);
+
+  useEffect(() => {
     return () => {
       stopScorePlayback();
+      releasePressedKeyboardNotes();
 
       if (typeof window === "undefined") {
         return;
@@ -164,7 +335,7 @@ export function PianoWorkspace() {
 
       cleanupTimersRef.current = [];
     };
-  }, []);
+  }, [releasePressedKeyboardNotes]);
 
   return (
     <section className="workspace-grid">
@@ -183,8 +354,13 @@ export function PianoWorkspace() {
           <TransportBar
             audioStatus={audioStatus}
             playbackStatus={playbackStatus}
+            keyboardMappingEnabled={keyboardMappingEnabled}
+            keyboardRowId={keyboardRowId}
+            keyboardRangeLabel={keyboardRangeLabel}
             selectedKeyLabel={selectedKey?.noteName ?? "尚未选中"}
             onEnableAudio={enableAudio}
+            onToggleKeyboardMapping={handleToggleKeyboardMapping}
+            onKeyboardRowChange={handleKeyboardRowChange}
             onPlayDemo={handlePlayDemo}
             onStopDemo={handleStopDemo}
           />
@@ -193,6 +369,8 @@ export function PianoWorkspace() {
               keys={pianoKeys}
               activeMidis={activeMidis}
               focusedMidi={selectedKey?.midi ?? null}
+              keyboardLabels={keyboardLabels}
+              showKeyboardLabels={keyboardMappingEnabled}
               onKeyPress={handleManualPlay}
             />
           </div>

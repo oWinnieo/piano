@@ -6,7 +6,7 @@ export default function Home() {
       <section className="hero-panel">
         <div className="hero-copy">
           <p className="eyebrow">Piano Lab / Phase 0 + 1</p>
-          <h1>网页电子钢琴已经开始真正落地。</h1>
+          <h1>Piano</h1>
           <p className="hero-description">
             当前版本已经完成项目初始化、88 键舞台建模、PixiJS 渲染骨架，以及基于
             Tone.js

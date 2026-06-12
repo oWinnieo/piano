@@ -249,6 +249,12 @@ button {
   border: 1px solid rgba(23, 37, 51, 0.1);
 }
 
+.toolbar-button.secondary.active {
+  background: #e7f7ef;
+  color: #12633d;
+  border-color: rgba(18, 99, 61, 0.24);
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -259,6 +265,30 @@ button {
   background: rgba(255, 255, 255, 0.86);
   color: var(--ink-soft);
   border: 1px solid var(--line);
+}
+
+.select-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+}
+
+.select-control span {
+  white-space: nowrap;
+}
+
+.select-control select {
+  min-height: 28px;
+  border: 0;
+  color: var(--ink);
+  background: transparent;
+  outline: none;
 }
 
 .status-dot {

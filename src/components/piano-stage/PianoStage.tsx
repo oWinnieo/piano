@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef } from "react";
 import { Application, Container, Graphics, Text } from "pixi.js";
 import {
   KEYBOARD_HEIGHT,
@@ -8,39 +8,67 @@ import {
   buildPianoKeys,
   canShowKeyLabel,
 } from "@/modules/piano/key-layout";
-import type { PianoKeyLayout } from "@/modules/piano/types";
+import type {
+  PianoKeyActiveSource,
+  PianoKeyLayout,
+} from "@/modules/piano/types";
 
 type PianoStageProps = {
   keys?: PianoKeyLayout[];
-  activeMidis: number[];
+  keyboardWidth?: number;
+  keyboardHeight?: number;
+  activeKeys: Partial<Record<number, PianoKeyActiveSource>>;
   focusedMidi: number | null;
   keyboardLabels?: Record<number, string>;
   showKeyboardLabels?: boolean;
+  stageScale?: number;
   onKeyPress: (key: PianoKeyLayout) => void;
 };
 
 const WHITE_KEY_BASE = 0xfffbf5;
-const WHITE_KEY_ACTIVE = 0xffd07f;
+const WHITE_KEY_MANUAL_ACTIVE = 0xffd07f;
+const WHITE_KEY_RIGHT_ACTIVE = 0xffa8c8;
+const WHITE_KEY_LEFT_ACTIVE = 0xa9ddff;
 const WHITE_KEY_FOCUSED = 0xf0b55a;
 const BLACK_KEY_BASE = 0x1f2c39;
-const BLACK_KEY_ACTIVE = 0xf18d2d;
+const BLACK_KEY_MANUAL_ACTIVE = 0xf18d2d;
+const BLACK_KEY_RIGHT_ACTIVE = 0xff6ea6;
+const BLACK_KEY_LEFT_ACTIVE = 0x5bb8ef;
 const BLACK_KEY_FOCUSED = 0xf4ba62;
 const MAPPED_KEY_STROKE = 0x167a4a;
+const DEFAULT_STAGE_SCALE = 1;
+
+function normalizeStageScale(scale: number) {
+  return Number.isFinite(scale) && scale > 0 ? scale : DEFAULT_STAGE_SCALE;
+}
+
+function getActiveKeyFill(
+  key: PianoKeyLayout,
+  activeSource: PianoKeyActiveSource | undefined,
+) {
+  if (!activeSource) {
+    return key.isBlack ? BLACK_KEY_BASE : WHITE_KEY_BASE;
+  }
+
+  if (activeSource === "right") {
+    return key.isBlack ? BLACK_KEY_RIGHT_ACTIVE : WHITE_KEY_RIGHT_ACTIVE;
+  }
+
+  if (activeSource === "left") {
+    return key.isBlack ? BLACK_KEY_LEFT_ACTIVE : WHITE_KEY_LEFT_ACTIVE;
+  }
+
+  return key.isBlack ? BLACK_KEY_MANUAL_ACTIVE : WHITE_KEY_MANUAL_ACTIVE;
+}
 
 function redrawKeyGraphic(
   graphic: Graphics,
   key: PianoKeyLayout,
-  isActive: boolean,
+  activeSource: PianoKeyActiveSource | undefined,
   isFocused: boolean,
   isMapped: boolean,
 ) {
-  const fill = key.isBlack
-    ? isActive
-      ? BLACK_KEY_ACTIVE
-      : BLACK_KEY_BASE
-    : isActive
-      ? WHITE_KEY_ACTIVE
-      : WHITE_KEY_BASE;
+  const fill = getActiveKeyFill(key, activeSource);
 
   const stroke = isFocused
     ? key.isBlack
@@ -64,13 +92,24 @@ function redrawKeyGraphic(
 
 export function PianoStage({
   keys,
-  activeMidis,
+  keyboardWidth = KEYBOARD_WIDTH,
+  keyboardHeight = KEYBOARD_HEIGHT,
+  activeKeys,
   focusedMidi,
   keyboardLabels = {},
   showKeyboardLabels = false,
+  stageScale = DEFAULT_STAGE_SCALE,
   onKeyPress,
 }: PianoStageProps) {
   const pianoKeys = useMemo(() => keys ?? buildPianoKeys(), [keys]);
+  const normalizedStageScale = normalizeStageScale(stageScale);
+  const canvasWidth = keyboardWidth * normalizedStageScale;
+  const canvasHeight = keyboardHeight * normalizedStageScale;
+  const hostStyle = {
+    "--piano-canvas-width": `${canvasWidth}px`,
+    "--piano-canvas-height": `${canvasHeight}px`,
+    "--piano-canvas-aspect": `${canvasWidth} / ${canvasHeight}`,
+  } as CSSProperties & Record<`--${string}`, string>;
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
@@ -96,9 +135,10 @@ export function PianoStage({
 
       const app = new Application();
       await app.init({
-        width: KEYBOARD_WIDTH,
-        height: KEYBOARD_HEIGHT,
+        width: canvasWidth,
+        height: canvasHeight,
         antialias: true,
+        autoDensity: true,
         backgroundAlpha: 0,
         resolution: window.devicePixelRatio || 1,
       });
@@ -115,6 +155,7 @@ export function PianoStage({
       appRef.current = app;
 
       const stage = new Container();
+      stage.scale.set(normalizedStageScale);
       app.stage.addChild(stage);
 
       const whiteLayer = new Container();
@@ -128,7 +169,7 @@ export function PianoStage({
         const graphic = new Graphics();
         graphic.eventMode = "static";
         graphic.cursor = "pointer";
-        redrawKeyGraphic(graphic, key, false, false, false);
+        redrawKeyGraphic(graphic, key, undefined, false, false);
         graphic.on("pointerdown", () => {
           onKeyPressRef.current(key);
         });
@@ -151,7 +192,7 @@ export function PianoStage({
             anchor: { x: 0.5, y: 0.5 },
           });
           text.x = key.x + key.width / 2;
-          text.y = key.y + key.height - 18;
+          text.y = key.y + key.height - 32;
           labelLayer.addChild(text);
         }
 
@@ -166,7 +207,7 @@ export function PianoStage({
           anchor: { x: 0.5, y: 0.5 },
         });
         keyboardText.x = key.x + key.width / 2;
-        keyboardText.y = key.isBlack ? key.y + 28 : key.y + 92;
+        keyboardText.y = key.isBlack ? key.y + 28 : key.y + 100;
         keyboardText.visible = false;
         labelLayer.addChild(keyboardText);
         keyboardLabelMap.set(key.midi, keyboardText);
@@ -189,7 +230,7 @@ export function PianoStage({
         pixiApp.destroy(true);
       }
     };
-  }, [pianoKeys]);
+  }, [canvasHeight, canvasWidth, normalizedStageScale, pianoKeys]);
 
   useEffect(() => {
     for (const key of pianoKeys) {
@@ -203,7 +244,7 @@ export function PianoStage({
       redrawKeyGraphic(
         graphic,
         key,
-        activeMidis.includes(key.midi),
+        activeKeys[key.midi],
         focusedMidi === key.midi,
         showKeyboardLabels && keyboardLabels[key.midi] !== undefined,
       );
@@ -214,11 +255,11 @@ export function PianoStage({
           showKeyboardLabels && keyboardLabels[key.midi] !== undefined;
       }
     }
-  }, [activeMidis, focusedMidi, keyboardLabels, pianoKeys, showKeyboardLabels]);
+  }, [activeKeys, focusedMidi, keyboardLabels, pianoKeys, showKeyboardLabels]);
 
   return (
     <div ref={scrollRef} className="stage-scroll">
-      <div ref={hostRef} className="pixi-host" />
+      <div ref={hostRef} className="pixi-host" style={hostStyle} />
     </div>
   );
 }

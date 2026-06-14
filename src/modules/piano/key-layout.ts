@@ -1,5 +1,12 @@
 import type { PianoKeyLayout } from "@/modules/piano/types";
 
+export type PianoKeyRow = {
+  id: string;
+  label: string;
+  startMidi: number;
+  endMidi: number;
+};
+
 const NOTE_NAMES = [
   "C",
   "C#",
@@ -17,52 +24,56 @@ const NOTE_NAMES = [
 
 const BLACK_PITCH_CLASSES = new Set([1, 3, 6, 8, 10]);
 
-export const WHITE_KEY_WIDTH = 30;
-export const WHITE_KEY_HEIGHT = 126;
-export const BLACK_KEY_WIDTH = 20;
-export const BLACK_KEY_HEIGHT = 76;
+export const WHITE_KEY_WIDTH = 27;
+export const WHITE_KEY_HEIGHT = 114;
+export const BLACK_KEY_WIDTH = 18;
+export const BLACK_KEY_HEIGHT = 68;
 export const ROW_GAP = 22;
-export const STAGE_PADDING_X = 18;
-export const STAGE_PADDING_Y = 16;
+export const STAGE_PADDING_X = 16;
+export const STAGE_PADDING_Y = 26;
 
 export const PIANO_KEY_ROWS = [
-  { id: "low", label: "A0-C1", startMidi: 21, endMidi: 35 },
-  { id: "bass", label: "C2-C3", startMidi: 36, endMidi: 59 },
-  { id: "middle", label: "C4-C5", startMidi: 60, endMidi: 83 },
-  { id: "high", label: "C6-C8", startMidi: 84, endMidi: 108 },
+  { id: "low", label: "A0-C3", startMidi: 21, endMidi: 59 },
+  { id: "high", label: "C4-C8", startMidi: 60, endMidi: 108 },
 ] as const;
 
-const MAX_WHITE_KEYS_IN_ROW = Math.max(
-  ...PIANO_KEY_ROWS.map(({ startMidi, endMidi }) => {
-    let whiteKeys = 0;
+function countWhiteKeysInRow({ startMidi, endMidi }: PianoKeyRow) {
+  let whiteKeys = 0;
 
-    for (let midi = startMidi; midi <= endMidi; midi += 1) {
-      if (!BLACK_PITCH_CLASSES.has(midi % 12)) {
-        whiteKeys += 1;
-      }
+  for (let midi = startMidi; midi <= endMidi; midi += 1) {
+    if (!BLACK_PITCH_CLASSES.has(midi % 12)) {
+      whiteKeys += 1;
     }
+  }
 
-    return whiteKeys;
-  }),
-);
-
-export const KEYBOARD_WIDTH =
-  STAGE_PADDING_X * 2 + MAX_WHITE_KEYS_IN_ROW * WHITE_KEY_WIDTH;
-export const KEYBOARD_HEIGHT =
-  STAGE_PADDING_Y * 2 +
-  PIANO_KEY_ROWS.length * WHITE_KEY_HEIGHT +
-  (PIANO_KEY_ROWS.length - 1) * ROW_GAP;
-
-export function midiToNoteName(midi: number) {
-  const pitchClass = midi % 12;
-  const octave = Math.floor(midi / 12) - 1;
-  return `${NOTE_NAMES[pitchClass]}${octave}`;
+  return whiteKeys;
 }
 
-export function buildPianoKeys() {
+export function getPianoKeyboardSize(
+  rows: readonly PianoKeyRow[] = PIANO_KEY_ROWS,
+) {
+  const maxWhiteKeysInRow = Math.max(
+    ...rows.map((row) => countWhiteKeysInRow(row)),
+  );
+
+  return {
+    width: STAGE_PADDING_X * 2 + maxWhiteKeysInRow * WHITE_KEY_WIDTH,
+    height:
+      STAGE_PADDING_Y * 2 +
+      rows.length * WHITE_KEY_HEIGHT +
+      Math.max(rows.length - 1, 0) * ROW_GAP,
+  };
+}
+
+const DEFAULT_KEYBOARD_SIZE = getPianoKeyboardSize();
+
+export const KEYBOARD_WIDTH = DEFAULT_KEYBOARD_SIZE.width;
+export const KEYBOARD_HEIGHT = DEFAULT_KEYBOARD_SIZE.height;
+
+export function buildPianoKeys(rows: readonly PianoKeyRow[] = PIANO_KEY_ROWS) {
   const keys: PianoKeyLayout[] = [];
 
-  for (const [rowIndex, row] of PIANO_KEY_ROWS.entries()) {
+  for (const [rowIndex, row] of rows.entries()) {
     let whiteIndex = 0;
     const y = STAGE_PADDING_Y + rowIndex * (WHITE_KEY_HEIGHT + ROW_GAP);
 
@@ -103,6 +114,12 @@ export function buildPianoKeys() {
   }
 
   return keys;
+}
+
+export function midiToNoteName(midi: number) {
+  const pitchClass = midi % 12;
+  const octave = Math.floor(midi / 12) - 1;
+  return `${NOTE_NAMES[pitchClass]}${octave}`;
 }
 
 export function canShowKeyLabel(key: PianoKeyLayout) {

@@ -8,3 +8,5 @@ export type PianoKeyLayout = {
   height: number;
   radius: number;
 };
+
+export type PianoKeyActiveSource = "left" | "right" | "manual";

@@ -4,16 +4,22 @@ import { KEYBOARD_ROW_OPTIONS } from "@/modules/piano/keyboard-mapping";
 type AudioStatus = "idle" | "loading" | "ready" | "error";
 type PlaybackStatus = "stopped" | "playing";
 
+export const PLAYBACK_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
+export type PlaybackRate = (typeof PLAYBACK_RATE_OPTIONS)[number];
+
 type TransportBarProps = {
   audioStatus: AudioStatus;
   playbackStatus: PlaybackStatus;
   keyboardMappingEnabled: boolean;
   keyboardRowId: PianoKeyboardRowId;
   keyboardRangeLabel: string;
+  playbackRate: PlaybackRate;
   selectedKeyLabel: string;
   onEnableAudio: () => void;
   onToggleKeyboardMapping: () => void;
   onKeyboardRowChange: (rowId: PianoKeyboardRowId) => void;
+  onPlaybackRateChange: (playbackRate: PlaybackRate) => void;
+  onOpenSongLibrary: () => void;
   onPlayDemo: () => void;
   onStopDemo: () => void;
 };
@@ -37,10 +43,13 @@ export function TransportBar({
   keyboardMappingEnabled,
   keyboardRowId,
   keyboardRangeLabel,
+  playbackRate,
   selectedKeyLabel,
   onEnableAudio,
   onToggleKeyboardMapping,
   onKeyboardRowChange,
+  onPlaybackRateChange,
+  onOpenSongLibrary,
   onPlayDemo,
   onStopDemo,
 }: TransportBarProps) {
@@ -66,6 +75,13 @@ export function TransportBar({
         <button
           type="button"
           className="toolbar-button secondary"
+          onClick={onOpenSongLibrary}
+        >
+          打开曲库
+        </button>
+        <button
+          type="button"
+          className="toolbar-button secondary"
           onClick={onPlayDemo}
           disabled={playbackStatus === "playing"}
         >
@@ -86,6 +102,21 @@ export function TransportBar({
       </div>
       <div className="toolbar">
         <label className="select-control">
+          <span>播放速度</span>
+          <select
+            value={playbackRate}
+            onChange={(event) =>
+              onPlaybackRateChange(Number(event.target.value) as PlaybackRate)
+            }
+          >
+            {PLAYBACK_RATE_OPTIONS.map((rate) => (
+              <option key={rate} value={rate}>
+                {rate}x
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="select-control">
           <span>键盘对应排</span>
           <select
             value={keyboardRowId}
@@ -103,7 +134,7 @@ export function TransportBar({
         <span className="status-pill">当前选中：{selectedKeyLabel}</span>
         <span className="status-pill">键盘窗口：{keyboardRangeLabel}</span>
         <span className="status-pill">
-          播放状态：{playbackStatus === "playing" ? "示例演奏中" : "空闲"}
+          播放状态：{playbackStatus === "playing" ? "演奏中" : "空闲"}
         </span>
       </div>
     </>

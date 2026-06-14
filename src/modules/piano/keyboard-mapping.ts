@@ -44,12 +44,12 @@ export const KEYBOARD_ROW_OPTIONS = PIANO_KEY_ROWS.map((row) => ({
   endMidi: row.endMidi,
 }));
 
-export const DEFAULT_KEYBOARD_ROW_ID: PianoKeyboardRowId = "middle";
+export const DEFAULT_KEYBOARD_ROW_ID: PianoKeyboardRowId = "high";
 
 export type KeyboardNoteCode = keyof typeof KEYBOARD_CODE_OFFSETS;
 
 function getKeyboardRow(rowId: PianoKeyboardRowId) {
-  return PIANO_KEY_ROWS.find((row) => row.id === rowId) ?? PIANO_KEY_ROWS[2];
+  return PIANO_KEY_ROWS.find((row) => row.id === rowId) ?? PIANO_KEY_ROWS[0];
 }
 
 export function getKeyboardMappedMidi(code: string, rowId: PianoKeyboardRowId) {

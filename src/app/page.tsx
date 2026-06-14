@@ -1,3 +1,4 @@
+import { OrientationPrompt } from "@/components/orientation-prompt/OrientationPrompt";
 import { PianoWorkspace } from "@/components/piano-workspace/PianoWorkspace";
 
 export default function Home() {
@@ -5,30 +6,21 @@ export default function Home() {
     <main className="page-shell">
       <section className="hero-panel">
         <div className="hero-copy">
-          <p className="eyebrow">Piano Lab / Phase 0 + 1</p>
-          <h1>Piano</h1>
-          <p className="hero-description">
-            当前版本已经完成项目初始化、88 键舞台建模、PixiJS 渲染骨架，以及基于
-            Tone.js
-            的钢琴音色接入。你可以先点键弹奏，再用示例旋律验证自动播放主链路。
-          </p>
+          <p className="eyebrow">Piano Lab</p>
+          <h1>Web Piano</h1>
+          <p className="hero-description">选择曲谱，让 88 键电子琴自动演奏。</p>
         </div>
         <div className="hero-metrics">
           <div className="metric-card">
-            <span>键盘范围</span>
-            <strong>A0 - C8</strong>
+            <span>88 键</span>
           </div>
           <div className="metric-card">
-            <span>演奏视图</span>
-            <strong>PixiJS Canvas</strong>
-          </div>
-          <div className="metric-card">
-            <span>当前输入</span>
-            <strong>示例 NoteEvent</strong>
+            <span>PixiJS + Tone.js</span>
           </div>
         </div>
       </section>
       <PianoWorkspace />
+      <OrientationPrompt />
     </main>
   );
 }

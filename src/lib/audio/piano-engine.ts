@@ -40,6 +40,10 @@ type PlaybackCallbacks = {
   onComplete?: () => void;
 };
 
+type PlaybackOptions = {
+  playbackRate?: number;
+};
+
 let sampler: Tone.Sampler | null = null;
 let samplerReadyPromise: Promise<Tone.Sampler> | null = null;
 let noteOffTimeouts: number[] = [];
@@ -115,10 +119,15 @@ export function releaseAllPianoNotes() {
 export async function playScoreDocument(
   score: ScoreDocument,
   callbacks: PlaybackCallbacks = {},
+  options: PlaybackOptions = {},
 ) {
   const activeSampler = await preparePianoAudio();
   const transport = Tone.getTransport();
   const notes = getSortedNotes(score);
+  const playbackRate =
+    Number.isFinite(options.playbackRate) && options.playbackRate
+      ? options.playbackRate
+      : 1;
   const totalTicks =
     notes.reduce(
       (maxTick, note) => Math.max(maxTick, note.startTick + note.durationTick),
@@ -129,7 +138,7 @@ export async function playScoreDocument(
   stopScorePlayback();
 
   transport.PPQ = score.ppq;
-  transport.bpm.value = score.tempo;
+  transport.bpm.value = score.tempo * playbackRate;
 
   for (const note of notes) {
     transport.schedule((time) => {
@@ -162,6 +171,16 @@ export async function playScoreDocument(
   }, `${totalTicks}i`);
 
   transport.start();
+}
+
+export function setScorePlaybackRate(
+  score: ScoreDocument,
+  playbackRate: number,
+) {
+  const normalizedPlaybackRate =
+    Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
+
+  Tone.getTransport().bpm.value = score.tempo * normalizedPlaybackRate;
 }
 
 export function stopScorePlayback() {

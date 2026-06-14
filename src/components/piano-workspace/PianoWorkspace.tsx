@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PianoStage } from "@/components/piano-stage/PianoStage";
+import {
+  PianoStage,
+  type PianoStageHandle,
+} from "@/components/piano-stage/PianoStage";
 import { ScorePanel } from "@/components/score-panel/ScorePanel";
 import { SongLibraryModal } from "@/components/song-library-modal/SongLibraryModal";
 import {
@@ -76,6 +79,7 @@ export function PianoWorkspace() {
     Partial<Record<number, PianoKeyActiveSource>>
   >({});
   const [selectedKey, setSelectedKey] = useState<PianoKeyLayout | null>(null);
+  const pianoStageRef = useRef<PianoStageHandle | null>(null);
   const cleanupTimersRef = useRef<number[]>([]);
   const pressedKeyboardKeysRef = useRef<Map<string, PianoKeyLayout>>(new Map());
   const keyByMidi = useMemo(
@@ -90,6 +94,16 @@ export function PianoWorkspace() {
     () => getKeyboardMidiLabels(keyboardRowId),
     [keyboardRowId],
   );
+
+  function focusPianoStage() {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      pianoStageRef.current?.focus();
+    });
+  }
 
   const activateMidi = useCallback(
     (midi: number, source: PianoKeyActiveSource = "manual") => {
@@ -164,12 +178,14 @@ export function PianoWorkspace() {
 
       return !enabled;
     });
+    focusPianoStage();
   }
 
   function handleKeyboardRowChange(rowId: PianoKeyboardRowId) {
     releasePressedKeyboardNotes();
     releaseAllPianoNotes();
     setKeyboardRowId(rowId);
+    focusPianoStage();
   }
 
   const loadSongLibrary = useCallback(async () => {
@@ -206,6 +222,7 @@ export function PianoWorkspace() {
 
   function handlePlaybackRateChange(nextPlaybackRate: PlaybackRate) {
     setPlaybackRate(nextPlaybackRate);
+    focusPianoStage();
 
     if (playbackStatus === "playing") {
       setScorePlaybackRate(currentScore, nextPlaybackRate);
@@ -373,19 +390,18 @@ export function PianoWorkspace() {
       return (
         target.isContentEditable ||
         target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.tagName === "SELECT"
+        target.tagName === "TEXTAREA"
       );
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (shouldIgnoreKeyboardEvent(event)) {
-        return;
-      }
-
       const midi = getKeyboardMappedMidi(event.code, keyboardRowId);
 
       if (midi === null) {
+        return;
+      }
+
+      if (shouldIgnoreKeyboardEvent(event)) {
         return;
       }
 
@@ -481,6 +497,7 @@ export function PianoWorkspace() {
           />
           <div className="stage-shell">
             <PianoStage
+              ref={pianoStageRef}
               keys={pianoKeys}
               keyboardWidth={pianoSize.width}
               keyboardHeight={pianoSize.height}

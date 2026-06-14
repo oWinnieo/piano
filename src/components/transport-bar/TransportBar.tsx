@@ -131,8 +131,8 @@ export function TransportBar({
             ))}
           </select>
         </label>
-        <span className="status-pill">当前选中：{selectedKeyLabel}</span>
-        <span className="status-pill">键盘窗口：{keyboardRangeLabel}</span>
+        {/* <span className="status-pill">当前选中：{selectedKeyLabel}</span> */}
+        {/* <span className="status-pill">键盘窗口：{keyboardRangeLabel}</span> */}
         <span className="status-pill">
           播放状态：{playbackStatus === "playing" ? "演奏中" : "空闲"}
         </span>
